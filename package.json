@@ -1,0 +1,12 @@
+{
+    "name": "minecraft-server",
+    "version": "1.0.0",
+    "description": "Minecraft 線上伺服器",
+    "main": "server.js",
+    "scripts": {
+        "start": "node server.js"
+    },
+    "dependencies": {
+        "ws": "^8.14.0"
+    }
+}

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>⛏️ Minecraft 連線測試</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background: #1a1a2e;
+            color: #fff;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            flex-direction: column;
+        }
+        #status {
+            font-size: 24px;
+            padding: 20px;
+            border-radius: 12px;
+            background: rgba(255,255,255,0.05);
+            margin-bottom: 20px;
+        }
+        button {
+            padding: 12px 30px;
+            font-size: 18px;
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            background: #44dd88;
+            color: #000;
+            font-weight: bold;
+        }
+        button:hover {
+            background: #66ffaa;
+        }
+        #log {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #888;
+            max-height: 200px;
+            overflow-y: auto;
+            width: 400px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <h1>⛏️ Minecraft 伺服器測試</h1>
+    <div id="status">🔌 未連線</div>
+    <button onclick="connect()">🔗 連線到伺服器</button>
+    <div id="log"></div>
+
+    <script>
+        let ws = null;
+
+        function connect() {
+            const status = document.getElementById('status');
+            const log = document.getElementById('log');
+
+            status.textContent = '🔄 連線中...';
+            status.style.color = '#ffaa44';
+
+            ws = new WebSocket('ws://localhost:8080');
+
+            ws.onopen = () => {
+                status.textContent = '✅ 連線成功！伺服器正常！';
+                status.style.color = '#44ff88';
+                log.innerHTML += '✅ 已連線到伺服器<br>';
+            };
+
+            ws.onclose = () => {
+                status.textContent = '❌ 斷線';
+                status.style.color = '#ff4444';
+                log.innerHTML += '❌ 斷線<br>';
+            };
+
+            ws.onerror = () => {
+                status.textContent = '⚠️ 連線錯誤';
+                status.style.color = '#ff8844';
+                log.innerHTML += '⚠️ 連線錯誤<br>';
+            };
+
+            ws.onmessage = (event) => {
+                log.innerHTML += '📩 收到: ' + event.data + '<br>';
+            };
+        }
+    </script>
+
+</body>
+</html>
