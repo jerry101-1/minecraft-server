@@ -405,6 +405,20 @@ document.addEventListener('keydown', (e) => {
         updateHotbar();
     }
 });
+// ============================================================
+//  跳躍系統
+// ============================================================
+let velocityY = 0;
+let isOnGround = false;
+const GRAVITY = -20;
+const JUMP_SPEED = 8;
+
+function jump() {
+    if (isOnGround) {
+        velocityY = JUMP_SPEED;
+        isOnGround = false;
+    }
+}
 
 document.addEventListener('keyup', (e) => {
     if (e.key === 'w' || e.key === 'W') keys.w = false;
@@ -617,6 +631,18 @@ function sendPosition() {
 // ============================================================
 function updatePlayer(delta) {
     if (!isLocked) return;
+    
+    // 重力
+    velocityY += GRAVITY * delta;
+    localPlayer.position.y += velocityY * delta;
+    
+    // 地面碰撞
+    if (localPlayer.position.y <= 0) {
+        localPlayer.position.y = 0;
+        velocityY = 0;
+        isOnGround = true;
+    }
+    
     const speed = keys.shift ? 6 : 4;
     const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
     const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
@@ -641,7 +667,7 @@ function updatePlayer(delta) {
 
     camera.position.x = localPlayer.position.x;
     camera.position.z = localPlayer.position.z;
-    camera.position.y = 1.8;
+    camera.position.y = localPlayer.position.y + 1.8;
 
     for (const id in otherPlayers) {
         const p = otherPlayers[id];
