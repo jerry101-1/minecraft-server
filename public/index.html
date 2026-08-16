@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>⛏️ Minecraft 方塊世界</title>
+    <style>
+        * { margin: 0; padding: 0; }
+        body { overflow: hidden; background: #1a1a2e; font-family: 'Courier New', monospace; }
+        #info {
+            position: absolute;
+            top: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #fff;
+            background: rgba(0,0,0,0.7);
+            padding: 6px 18px;
+            border-radius: 10px;
+            font-size: 13px;
+            z-index: 10;
+            pointer-events: none;
+            border: 1px solid rgba(255,255,255,0.05);
+        }
+        #status {
+            position: absolute;
+            top: 60px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255,255,255,0.3);
+            font-size: 11px;
+            z-index: 10;
+            pointer-events: none;
+        }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: rgba(255,255,255,0.15);
+            font-size: 28px;
+            pointer-events: none;
+            z-index: 10;
+        }
+        #controls {
+            position: absolute;
+            bottom: 70px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255,255,255,0.1);
+            font-size: 10px;
+            z-index: 10;
+            pointer-events: none;
+            text-align: center;
+            line-height: 1.6;
+        }
+        #hotbar {
+            position: absolute;
+            bottom: 15px;
+            left: 50%;
+            transform: translateX(-50%);
+            display: flex;
+            gap: 2px;
+            background: rgba(0,0,0,0.8);
+            padding: 4px;
+            border-radius: 4px;
+            border: 2px solid rgba(255,255,255,0.05);
+            z-index: 10;
+            pointer-events: none;
+        }
+        .slot {
+            width: 40px;
+            height: 40px;
+            background: rgba(255,255,255,0.05);
+            border: 2px solid rgba(255,255,255,0.05);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 18px;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            position: relative;
+        }
+        .slot.active { border-color: #fff; background: rgba(255,255,255,0.12); }
+        .slot .count {
+            position: absolute;
+            bottom: 2px;
+            right: 4px;
+            font-size: 10px;
+            color: #aaa;
+        }
+        #players {
+            position: absolute;
+            top: 100px;
+            right: 15px;
+            color: rgba(255,255,255,0.2);
+            font-size: 10px;
+            z-index: 10;
+            pointer-events: none;
+            text-align: right;
+            background: rgba(0,0,0,0.3);
+            padding: 6px 12px;
+            border-radius: 8px;
+            min-width: 80px;
+        }
+        .green { color: #44ff88; }
+        .gray { color: #666; }
+        #blockInfo {
+            position: absolute;
+            bottom: 110px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: rgba(255,255,255,0.15);
+            font-size: 10px;
+            z-index: 10;
+            pointer-events: none;
+        }
+        #inventoryInfo {
+            position: absolute;
+            bottom: 110px;
+            right: 20px;
+            color: rgba(255,255,255,0.1);
+            font-size: 9px;
+            z-index: 10;
+            pointer-events: none;
+            text-align: right;
+            font-family: 'Courier New', monospace;
+            line-height: 1.4;
+        }
+    </style>
+</head>
+<body>
+
+<div id="info">⛏️ Minecraft 方塊世界</div>
+<div id="status">🔄 連線中...</div>
+<div id="crosshair">✚</div>
+<div id="blockInfo">左鍵挖掘 · 右鍵放置</div>
+<div id="inventoryInfo"></div>
+<div id="hotbar"></div>
+<div id="players"></div>
+<div id="controls">WASD 移動 · 滑鼠瞄準 · 左鍵挖 · 右鍵放 · 1-9 切換方塊</div>
+
+<script type="importmap">
+{
+    "imports": {
+        "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js"
+    }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+
+// ============================================================
+//  連線設定 - 自動使用當前網址
+// ============================================================
+const WS_URL = `wss://${window.location.host}`;
+let ws = null;
+let playerId = null;
+let players = {};
+let world = {};
+let inventory = {};
+
+// ============================================================
+//  方塊顏色
+// ============================================================
+const BLOCK_COLORS = {
+    0: '#000000',
+    1: '#4a8a3a',
+    2: '#6a5a3a',
+    3: '#8a8a8a',
+    4: '#6a4a2a',
+    5: '#ca9a6a',
+    6: '#3a8a3a',
+    7: '#d4c48a',
+    8: '#7a7a7a',
+    9: '#aa5a3a',
+    10: '#88ccff',
+};
+
+const BLOCK_NAMES = {
+    0: '空',
+    1: '草地',
+    2: '泥土',
+    3: '石頭',
+    4: '木頭',
+    5: '木材',
+    6: '樹葉',
+    7: '沙子',
+    8: '鵝卵石',
+    9: '紅磚',
+    10: '玻璃',
+};
+
+// ============================================================
+//  Three.js 場景
+// ============================================================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x87CEEB);
+scene.fog = new THREE.Fog(0x87CEEB, 40, 60);
+
+const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 80);
+camera.position.set(0, 5, 10);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+// ============================================================
+//  燈光
+// ============================================================
+const ambient = new THREE.AmbientLight(0x6688bb, 0.4);
+scene.add(ambient);
+
+const sun = new THREE.DirectionalLight(0xffeedd, 1.2);
+sun.position.set(30, 40, 20);
+sun.castShadow = true;
+sun.shadow.mapSize.width = 2048;
+sun.shadow.mapSize.height = 2048;
+sun.shadow.camera.near = 0.5;
+sun.shadow.camera.far = 80;
+sun.shadow.camera.left = -40;
+sun.shadow.camera.right = 40;
+sun.shadow.camera.top = 40;
+sun.shadow.camera.bottom = -40;
+scene.add(sun);
+
+const hemi = new THREE.HemisphereLight(0x88ccff, 0x446622, 0.3);
+scene.add(hemi);
+
+// ============================================================
+//  方塊管理 (物件池優化)
+// ============================================================
+let blockMeshes = {};
+const geometry = new THREE.BoxGeometry(0.98, 0.98, 0.98);
+
+function createBlockMesh(x, y, z, blockId) {
+    const key = `${x},${y},${z}`;
+    if (blockMeshes[key]) {
+        scene.remove(blockMeshes[key]);
+        blockMeshes[key].geometry.dispose();
+        blockMeshes[key].material.dispose();
+        delete blockMeshes[key];
+    }
+    if (blockId === 0) return;
+    
+    const color = BLOCK_COLORS[blockId] || '#888888';
+    const mat = new THREE.MeshStandardMaterial({
+        color: color,
+        roughness: 0.7,
+        metalness: 0.05,
+    });
+    const mesh = new THREE.Mesh(geometry.clone(), mat);
+    mesh.position.set(Math.round(x), Math.round(y), Math.round(z));
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
+    mesh.userData = { x, y, z, blockId };
+    scene.add(mesh);
+    blockMeshes[key] = mesh;
+}
+
+function updateWorld(newWorld) {
+    // 清除所有方塊
+    for (const key in blockMeshes) {
+        scene.remove(blockMeshes[key]);
+        blockMeshes[key].geometry.dispose();
+        blockMeshes[key].material.dispose();
+    }
+    blockMeshes = {};
+    
+    // 建立新方塊 (限制數量避免卡頓)
+    let count = 0;
+    for (const key in newWorld) {
+        if (count > 5000) break;
+        const [x, y, z] = key.split(',').map(Number);
+        const blockId = newWorld[key];
+        if (blockId !== 0) {
+            createBlockMesh(x, y, z, blockId);
+            count++;
+        }
+    }
+    console.log('✅ 已渲染 ' + count + ' 個方塊');
+}
+
+function updateBlock(x, y, z, blockId) {
+    createBlockMesh(Math.round(x), Math.round(y), Math.round(z), blockId);
+}
+
+// ============================================================
+//  玩家方塊
+// ============================================================
+function createPlayerCube(color = 0x44ddff) {
+    const group = new THREE.Group();
+    const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.1 });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.6), bodyMat);
+    body.position.y = 0.4;
+    body.castShadow = true;
+    group.add(body);
+    
+    const headMat = new THREE.MeshStandardMaterial({ color: 0xffccaa, roughness: 0.5 });
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), headMat);
+    head.position.y = 0.9;
+    head.castShadow = true;
+    group.add(head);
+    
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x222244 });
+    const eL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.02), eyeMat);
+    eL.position.set(-0.1, 0.95, 0.2);
+    group.add(eL);
+    const eR = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.02), eyeMat);
+    eR.position.set(0.1, 0.95, 0.2);
+    group.add(eR);
+    
+    group.castShadow = true;
+    return group;
+}
+
+const localPlayer = createPlayerCube(0x44ddff);
+scene.add(localPlayer);
+const otherPlayers = {};
+
+// ============================================================
+//  射線檢測
+// ============================================================
+const raycaster = new THREE.Raycaster();
+let selectedSlot = 0;
+const hotbarBlocks = [1, 2, 4, 5, 7, 8, 9, 10, 0];
+
+function getTargetBlock() {
+    raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+    const meshes = [];
+    for (const key in blockMeshes) {
+        meshes.push(blockMeshes[key]);
+    }
+    const intersects = raycaster.intersectObjects(meshes);
+    if (intersects.length > 0) {
+        const hit = intersects[0];
+        const pos = hit.object.position;
+        const blockId = world[`${Math.round(pos.x)},${Math.round(pos.y)},${Math.round(pos.z)}`] || 0;
+        if (blockId !== 0) {
+            return { x: Math.round(pos.x), y: Math.round(pos.y), z: Math.round(pos.z), blockId };
+        }
+    }
+    return null;
+}
+
+function getPlacePosition() {
+    raycaster.setFromCamera({ x: 0, y: 0 }, camera);
+    const meshes = [];
+    for (const key in blockMeshes) {
+        meshes.push(blockMeshes[key]);
+    }
+    const intersects = raycaster.intersectObjects(meshes);
+    if (intersects.length > 0) {
+        const hit = intersects[0];
+        const normal = hit.face.normal;
+        const pos = hit.object.position;
+        return {
+            x: Math.round(pos.x + normal.x),
+            y: Math.round(pos.y + normal.y),
+            z: Math.round(pos.z + normal.z)
+        };
+    }
+    return null;
+}
+
+// ============================================================
+//  控制
+// ============================================================
+const keys = { w: false, a: false, s: false, d: false, shift: false };
+let isLocked = false;
+let isPointerLocked = false;
+
+document.addEventListener('click', () => {
+    if (!isLocked) {
+        renderer.domElement.requestPointerLock();
+    }
+});
+
+document.addEventListener('pointerlockchange', () => {
+    isLocked = document.pointerLockElement === renderer.domElement;
+    isPointerLocked = isLocked;
+});
+
+document.addEventListener('mousemove', (e) => {
+    if (!isLocked) return;
+    camera.rotation.order = 'YXZ';
+    camera.rotation.y -= e.movementX * 0.002;
+    camera.rotation.x -= e.movementY * 0.002;
+    camera.rotation.x = Math.max(-0.6, Math.min(0.8, camera.rotation.x));
+});
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'w' || e.key === 'W') keys.w = true;
+    if (e.key === 'a' || e.key === 'A') keys.a = true;
+    if (e.key === 's' || e.key === 'S') keys.s = true;
+    if (e.key === 'd' || e.key === 'D') keys.d = true;
+    if (e.key === 'Shift') keys.shift = true;
+    
+    const num = parseInt(e.key);
+    if (num >= 1 && num <= 9) {
+        selectedSlot = num - 1;
+        updateHotbar();
+    }
+});
+
+document.addEventListener('keyup', (e) => {
+    if (e.key === 'w' || e.key === 'W') keys.w = false;
+    if (e.key === 'a' || e.key === 'A') keys.a = false;
+    if (e.key === 's' || e.key === 'S') keys.s = false;
+    if (e.key === 'd' || e.key === 'D') keys.d = false;
+    if (e.key === 'Shift') keys.shift = false;
+});
+
+// 滑鼠事件
+renderer.domElement.addEventListener('mousedown', (e) => {
+    if (!isLocked) return;
+    if (e.button === 0) {
+        const target = getTargetBlock();
+        if (target) {
+            ws.send(JSON.stringify({
+                type: 'break_block',
+                x: target.x,
+                y: target.y,
+                z: target.z
+            }));
+        }
+    } else if (e.button === 2) {
+        const pos = getPlacePosition();
+        if (pos) {
+            const blockId = hotbarBlocks[selectedSlot] || 1;
+            if (blockId > 0) {
+                ws.send(JSON.stringify({
+                    type: 'place_block',
+                    x: pos.x,
+                    y: pos.y,
+                    z: pos.z,
+                    blockId: blockId
+                }));
+            }
+        }
+    }
+});
+
+renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
+
+// ============================================================
+//  UI
+// ============================================================
+function updateHotbar() {
+    const hotbarEl = document.getElementById('hotbar');
+    hotbarEl.innerHTML = hotbarBlocks.map((id, i) => {
+        const count = inventory[id] || 0;
+        const isActive = i === selectedSlot;
+        const name = BLOCK_NAMES[id] || '空';
+        return `<div class="slot ${isActive ? 'active' : ''}" title="${name}">
+            ${id > 0 ? '🧱' : '·'}
+            <span class="count">${count > 0 ? count : ''}</span>
+        </div>`;
+    }).join('');
+    
+    // 更新背包資訊
+    const infoEl = document.getElementById('inventoryInfo');
+    const items = Object.keys(inventory).filter(k => inventory[k] > 0);
+    if (items.length > 0) {
+        infoEl.innerHTML = items.map(id => 
+            `${BLOCK_NAMES[id] || id}: ${inventory[id]}`
+        ).join('<br>');
+    } else {
+        infoEl.textContent = '背包空空的';
+    }
+}
+
+// ============================================================
+//  WebSocket
+// ============================================================
+function connectWebSocket() {
+    const statusEl = document.getElementById('status');
+    statusEl.textContent = '🔄 連線中...';
+    statusEl.style.color = '#ffaa44';
+    
+    ws = new WebSocket(WS_URL);
+
+    ws.onopen = () => {
+        statusEl.textContent = '✅ 已連線';
+        statusEl.style.color = '#44ff88';
+    };
+
+    ws.onclose = () => {
+        statusEl.textContent = '❌ 斷線，重連中...';
+        statusEl.style.color = '#ff4444';
+        setTimeout(connectWebSocket, 2000);
+    };
+
+    ws.onerror = () => {
+        statusEl.textContent = '⚠️ 連線錯誤';
+        statusEl.style.color = '#ff8844';
+    };
+
+    ws.onmessage = (event) => {
+        try {
+            const data = JSON.parse(event.data);
+            handleMessage(data);
+        } catch (e) {
+            console.error('解析錯誤:', e);
+        }
+    };
+}
+
+function handleMessage(data) {
+    if (data.type === 'init') {
+        playerId = data.id;
+        world = data.world || {};
+        updateWorld(world);
+        if (data.players) {
+            for (const p of data.players) {
+                if (p.id !== playerId) {
+                    addOtherPlayer(p.id, p.x, p.y, p.z);
+                }
+            }
+        }
+        updatePlayersList();
+        updateHotbar();
+    }
+    else if (data.type === 'player_join') {
+        if (data.id !== playerId) {
+            addOtherPlayer(data.id, data.x, data.y || 0, data.z);
+        }
+        updatePlayersList();
+    }
+    else if (data.type === 'update') {
+        if (data.id !== playerId) {
+            updateOtherPlayer(data.id, data.x, data.y || 0, data.z);
+        }
+    }
+    else if (data.type === 'player_leave') {
+        removeOtherPlayer(data.id);
+        updatePlayersList();
+    }
+    else if (data.type === 'block_update') {
+        const x = Math.round(data.x);
+        const y = Math.round(data.y);
+        const z = Math.round(data.z);
+        const key = `${x},${y},${z}`;
+        if (data.blockId === 0) {
+            delete world[key];
+        } else {
+            world[key] = data.blockId;
+        }
+        updateBlock(x, y, z, data.blockId);
+    }
+    else if (data.type === 'inventory') {
+        inventory = data.inventory || {};
+        updateHotbar();
+    }
+}
+
+// ============================================================
+//  玩家管理
+// ============================================================
+function addOtherPlayer(id, x, y, z) {
+    if (otherPlayers[id]) return;
+    const cube = createPlayerCube(0xff6644);
+    cube.position.set(x, y || 0, z);
+    scene.add(cube);
+    otherPlayers[id] = { mesh: cube, x, y, z };
+}
+
+function updateOtherPlayer(id, x, y, z) {
+    if (otherPlayers[id]) {
+        otherPlayers[id].x = x;
+        otherPlayers[id].y = y || 0;
+        otherPlayers[id].z = z;
+    }
+}
+
+function removeOtherPlayer(id) {
+    if (otherPlayers[id]) {
+        scene.remove(otherPlayers[id].mesh);
+        delete otherPlayers[id];
+    }
+}
+
+function updatePlayersList() {
+    const count = Object.keys(otherPlayers).length + 1;
+    const el = document.getElementById('players');
+    el.innerHTML = `<div class="green">● 你 (${count} 人在線)</div>`;
+    for (const id in otherPlayers) {
+        el.innerHTML += `<div class="gray">● 玩家 ${id}</div>`;
+    }
+}
+
+// ============================================================
+//  發送位置
+// ============================================================
+let lastSendTime = 0;
+
+function sendPosition() {
+    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+    const now = performance.now();
+    if (now - lastSendTime < 50) return;
+    lastSendTime = now;
+    ws.send(JSON.stringify({
+        type: 'move',
+        x: localPlayer.position.x,
+        y: localPlayer.position.y,
+        z: localPlayer.position.z,
+        rotX: camera.rotation.x,
+        rotY: camera.rotation.y
+    }));
+}
+
+// ============================================================
+//  動畫循環
+// ============================================================
+function updatePlayer(delta) {
+    if (!isLocked) return;
+    const speed = keys.shift ? 6 : 4;
+    const forward = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion);
+    const right = new THREE.Vector3(1, 0, 0).applyQuaternion(camera.quaternion);
+    forward.y = 0;
+    right.y = 0;
+    forward.normalize();
+    right.normalize();
+
+    const move = new THREE.Vector3();
+    if (keys.w) move.add(forward);
+    if (keys.s) move.sub(forward);
+    if (keys.a) move.sub(right);
+    if (keys.d) move.add(right);
+
+    if (move.length() > 0) {
+        move.normalize().multiplyScalar(speed * delta);
+        localPlayer.position.x += move.x;
+        localPlayer.position.z += move.z;
+        localPlayer.position.x = Math.max(-25, Math.min(25, localPlayer.position.x));
+        localPlayer.position.z = Math.max(-25, Math.min(25, localPlayer.position.z));
+    }
+
+    camera.position.x = localPlayer.position.x;
+    camera.position.z = localPlayer.position.z;
+    camera.position.y = 1.8;
+
+    for (const id in otherPlayers) {
+        const p = otherPlayers[id];
+        p.mesh.position.x += (p.x - p.mesh.position.x) * 0.1;
+        p.mesh.position.z += (p.z - p.mesh.position.z) * 0.1;
+    }
+
+    sendPosition();
+}
+
+function animate() {
+    requestAnimationFrame(animate);
+    updatePlayer(0.016);
+    renderer.render(scene, camera);
+}
+
+// ============================================================
+//  視窗調整
+// ============================================================
+window.addEventListener('resize', () => {
+    camera.aspect = window.innerWidth / window.innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(window.innerWidth, window.innerHeight);
+});
+
+// ============================================================
+//  啟動
+// ============================================================
+connectWebSocket();
+animate();
+
+console.log('⛏️ Minecraft 方塊世界已啟動!');
+console.log('📖 WASD移動 | 滑鼠瞄準 | 左鍵挖掘 | 右鍵放置');
+</script>
+</body>
+</html>
