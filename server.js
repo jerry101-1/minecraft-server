@@ -2,26 +2,17 @@ const express = require('express');
 const WebSocket = require('ws');
 const path = require('path');
 
-// ============================================================
-//  Express 網頁伺服器
-// ============================================================
 const app = express();
 const port = process.env.PORT || 8080;
 
-// 提供 public 資料夾的靜態檔案
 app.use(express.static(path.join(__dirname, 'public')));
 
-// 所有請求都回傳 index.html
 app.get('*', (req, res) => {
     res.sendFile(path.join(__dirname, 'public', 'index.html'));
 });
 
-// ============================================================
-//  WebSocket 伺服器（掛在同一個 port）
-// ============================================================
 const server = app.listen(port, () => {
-    console.log('⛏️ Minecraft 方塊伺服器啟動在 port ' + port);
-    console.log('🌐 網址: http://localhost:' + port);
+    console.log('⛏️ Minecraft 伺服器啟動在 port ' + port);
 });
 
 const wss = new WebSocket.Server({ server });
@@ -39,6 +30,8 @@ const BLOCKS = {
     6: { id: 6, name: '樹葉', color: '#3a8a3a', solid: true },
     7: { id: 7, name: '沙子', color: '#d4c48a', solid: true },
     8: { id: 8, name: '鵝卵石', color: '#7a7a7a', solid: true },
+    9: { id: 9, name: '紅磚', color: '#aa5a3a', solid: true },
+    10: { id: 10, name: '玻璃', color: '#88ccff', solid: false },
 };
 
 // ============================================================
@@ -65,32 +58,50 @@ function getBlock(x, y, z) {
 }
 
 // ============================================================
-//  世界生成
+//  世界生成 (Minecraft 風格地形)
 // ============================================================
 function generateWorld() {
-    const size = 16;
+    const size = 20;
     for (let x = -size; x < size; x++) {
         for (let z = -size; z < size; z++) {
-            let height = 3;
-            height += Math.floor(Math.sin(x * 0.3) * 1.5);
-            height += Math.floor(Math.cos(z * 0.25) * 1.5);
-            height = Math.max(1, Math.min(6, height));
+            // 地形高度 (使用簡單雜訊)
+            let height = 4;
+            height += Math.floor(Math.sin(x * 0.2) * 2);
+            height += Math.floor(Math.cos(z * 0.15) * 2);
+            height += Math.floor(Math.sin(x * 0.05 + z * 0.08) * 3);
+            height = Math.max(1, Math.min(8, height));
             
             for (let y = 0; y < height; y++) {
-                let blockId = 2;
-                if (y === height - 1) blockId = 1;
-                if (y === 0) blockId = 3;
+                let blockId = 2; // 泥土
+                if (y === height - 1) blockId = 1; // 草地
+                if (y === 0) blockId = 3; // 石頭
+                if (y < 0) blockId = 3; // 石頭
                 setBlock(x, y, z, blockId);
             }
         }
     }
     
-    for (let i = 0; i < 8; i++) {
-        const x = Math.floor((Math.random() - 0.5) * 20);
-        const z = Math.floor((Math.random() - 0.5) * 20);
-        if (Math.abs(x) < 3 && Math.abs(z) < 3) continue;
+    // 樹木
+    for (let i = 0; i < 15; i++) {
+        const x = Math.floor((Math.random() - 0.5) * 30);
+        const z = Math.floor((Math.random() - 0.5) * 30);
+        if (Math.abs(x) < 4 && Math.abs(z) < 4) continue;
         generateTree(x, z);
     }
+    
+    // 沙子 (靠近水)
+    for (let i = 0; i < 10; i++) {
+        const x = Math.floor((Math.random() - 0.5) * 30);
+        const z = Math.floor((Math.random() - 0.5) * 30);
+        for (let y = 0; y < 3; y++) {
+            if (getBlock(x, y, z) === 0) {
+                setBlock(x, y, z, 7); // 沙子
+                break;
+            }
+        }
+    }
+    
+    console.log('🌍 世界已生成，方塊數:', Object.keys(world).length);
 }
 
 function generateTree(x, z) {
@@ -102,18 +113,18 @@ function generateTree(x, z) {
         }
     }
     
-    const trunkHeight = 3 + Math.floor(Math.random() * 2);
+    const trunkHeight = 4 + Math.floor(Math.random() * 2);
     for (let i = 1; i <= trunkHeight; i++) {
         setBlock(x, groundY + i, z, 4);
     }
+    // 樹葉 (圓形)
     for (let dx = -2; dx <= 2; dx++) {
         for (let dz = -2; dz <= 2; dz++) {
-            for (let dy = trunkHeight - 1; dy <= trunkHeight + 1; dy++) {
-                if (Math.abs(dx) === 2 && Math.abs(dz) === 2) continue;
-                if (Math.abs(dx) === 2 || Math.abs(dz) === 2) {
-                    if (Math.random() > 0.6) continue;
-                }
-                if (dx === 0 && dz === 0 && dy === trunkHeight + 1) continue;
+            for (let dy = trunkHeight - 2; dy <= trunkHeight; dy++) {
+                const dist = Math.abs(dx) + Math.abs(dz);
+                if (dist > 3) continue;
+                if (dist === 3 && Math.random() > 0.3) continue;
+                if (dx === 0 && dz === 0 && dy === trunkHeight) continue;
                 setBlock(x + dx, groundY + dy, z + dz, 6);
             }
         }
@@ -121,7 +132,6 @@ function generateTree(x, z) {
 }
 
 generateWorld();
-console.log('🌍 世界已生成，方塊數:', Object.keys(world).length);
 
 // ============================================================
 //  玩家管理
@@ -197,7 +207,7 @@ function handleMessage(id, ws, data) {
         const z = data.z;
         const blockId = getBlock(x, y, z);
         if (blockId === 0) return;
-        if (blockId === 3) return;
+        if (blockId === 3) return; // 石頭不能挖
         
         p.inventory[blockId] = (p.inventory[blockId] || 0) + 1;
         setBlock(x, y, z, 0);
