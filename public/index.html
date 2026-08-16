@@ -133,11 +133,11 @@
 <div id="info">⛏️ Minecraft 方塊世界</div>
 <div id="status">🔄 連線中...</div>
 <div id="crosshair">✚</div>
-<div id="blockInfo">左鍵挖掘 · 右鍵放置</div>
+<div id="blockInfo">左鍵挖掘 · 右鍵放置 · 空白跳躍</div>
 <div id="inventoryInfo"></div>
 <div id="hotbar"></div>
 <div id="players"></div>
-<div id="controls">WASD 移動 · 滑鼠瞄準 · 左鍵挖 · 右鍵放 · 1-9 切換方塊</div>
+<div id="controls">WASD 移動 · 空白跳躍 · 滑鼠瞄準 · 左鍵挖 · 右鍵放 · 1-9 切換方塊</div>
 
 <script type="importmap">
 {
@@ -151,7 +151,7 @@
 import * as THREE from 'three';
 
 // ============================================================
-//  連線設定 - 自動使用當前網址
+//  連線設定
 // ============================================================
 const WS_URL = `wss://${window.location.host}`;
 let ws = null;
@@ -231,7 +231,7 @@ const hemi = new THREE.HemisphereLight(0x88ccff, 0x446622, 0.3);
 scene.add(hemi);
 
 // ============================================================
-//  方塊管理 (物件池優化)
+//  方塊管理
 // ============================================================
 let blockMeshes = {};
 const geometry = new THREE.BoxGeometry(0.98, 0.98, 0.98);
@@ -262,7 +262,6 @@ function createBlockMesh(x, y, z, blockId) {
 }
 
 function updateWorld(newWorld) {
-    // 清除所有方塊
     for (const key in blockMeshes) {
         scene.remove(blockMeshes[key]);
         blockMeshes[key].geometry.dispose();
@@ -270,7 +269,6 @@ function updateWorld(newWorld) {
     }
     blockMeshes = {};
     
-    // 建立新方塊 (限制數量避免卡頓)
     let count = 0;
     for (const key in newWorld) {
         if (count > 5000) break;
@@ -281,7 +279,6 @@ function updateWorld(newWorld) {
             count++;
         }
     }
-    console.log('✅ 已渲染 ' + count + ' 個方塊');
 }
 
 function updateBlock(x, y, z, blockId) {
@@ -289,37 +286,120 @@ function updateBlock(x, y, z, blockId) {
 }
 
 // ============================================================
-//  玩家方塊
+//  Minecraft 風格角色
 // ============================================================
-function createPlayerCube(color = 0x44ddff) {
+function createMinecraftPlayer(color = 0x44ddff) {
     const group = new THREE.Group();
-    const bodyMat = new THREE.MeshStandardMaterial({ color, roughness: 0.6, metalness: 0.1 });
-    const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.8, 0.6), bodyMat);
-    body.position.y = 0.4;
+    
+    // 身體 (上衣)
+    const bodyMat = new THREE.MeshStandardMaterial({ 
+        color: 0x3366cc, 
+        roughness: 0.8 
+    });
+    const body = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.7, 0.4), bodyMat);
+    body.position.y = 0.35;
     body.castShadow = true;
     group.add(body);
     
-    const headMat = new THREE.MeshStandardMaterial({ color: 0xffccaa, roughness: 0.5 });
-    const head = new THREE.Mesh(new THREE.BoxGeometry(0.4, 0.4, 0.4), headMat);
+    // 頭 (膚色方塊頭)
+    const headMat = new THREE.MeshStandardMaterial({ 
+        color: 0xffccaa, 
+        roughness: 0.5 
+    });
+    const head = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.5, 0.5), headMat);
     head.position.y = 0.9;
     head.castShadow = true;
     group.add(head);
     
-    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x222244 });
-    const eL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.02), eyeMat);
-    eL.position.set(-0.1, 0.95, 0.2);
-    group.add(eL);
-    const eR = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.02), eyeMat);
-    eR.position.set(0.1, 0.95, 0.2);
-    group.add(eR);
+    // 頭髮 (上層)
+    const hairMat = new THREE.MeshStandardMaterial({ color: 0x6a4a2a });
+    const hair = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.12, 0.5), hairMat);
+    hair.position.y = 1.1;
+    group.add(hair);
     
-    group.castShadow = true;
+    // 頭髮 (兩側)
+    const hairSide1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.3, 0.5), hairMat);
+    hairSide1.position.set(-0.28, 0.9, 0);
+    group.add(hairSide1);
+    const hairSide2 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.3, 0.5), hairMat);
+    hairSide2.position.set(0.28, 0.9, 0);
+    group.add(hairSide2);
+    
+    // 眼睛 (左)
+    const eyeMat = new THREE.MeshStandardMaterial({ color: 0x222244 });
+    const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.04), eyeMat);
+    eyeL.position.set(-0.14, 0.96, 0.27);
+    group.add(eyeL);
+    
+    // 眼睛 (右)
+    const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.04), eyeMat);
+    eyeR.position.set(0.14, 0.96, 0.27);
+    group.add(eyeR);
+    
+    // 嘴巴
+    const mouthMat = new THREE.MeshStandardMaterial({ color: 0x884444 });
+    const mouth = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.03, 0.02), mouthMat);
+    mouth.position.set(0, 0.85, 0.27);
+    group.add(mouth);
+    
+    // 左手臂 (膚色)
+    const armMat = new THREE.MeshStandardMaterial({ 
+        color: 0xffccaa, 
+        roughness: 0.7 
+    });
+    const armL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.1), armMat);
+    armL.position.set(-0.36, 0.4, 0);
+    armL.castShadow = true;
+    group.add(armL);
+    
+    // 右手臂 (膚色)
+    const armR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.1), armMat);
+    armR.position.set(0.36, 0.4, 0);
+    armR.castShadow = true;
+    group.add(armR);
+    
+    // 左腿 (褲子)
+    const legMat = new THREE.MeshStandardMaterial({ 
+        color: 0x224488, 
+        roughness: 0.8 
+    });
+    const legL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.3, 0.18), legMat);
+    legL.position.set(-0.15, 0.15, 0);
+    legL.castShadow = true;
+    group.add(legL);
+    
+    // 右腿 (褲子)
+    const legR = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.3, 0.18), legMat);
+    legR.position.set(0.15, 0.15, 0);
+    legR.castShadow = true;
+    group.add(legR);
+    
+    // 鞋子
+    const shoeMat = new THREE.MeshStandardMaterial({ color: 0x333333 });
+    const shoeL = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.08, 0.22), shoeMat);
+    shoeL.position.set(-0.15, 0.04, 0.02);
+    group.add(shoeL);
+    const shoeR = new THREE.Mesh(new THREE.BoxGeometry(0.2, 0.08, 0.22), shoeMat);
+    shoeR.position.set(0.15, 0.04, 0.02);
+    group.add(shoeR);
+    
     return group;
 }
 
-const localPlayer = createPlayerCube(0x44ddff);
+// ============================================================
+//  玩家
+// ============================================================
+const localPlayer = createMinecraftPlayer(0x44ddff);
 scene.add(localPlayer);
 const otherPlayers = {};
+
+// ============================================================
+//  跳躍系統
+// ============================================================
+let velocityY = 0;
+let isOnGround = false;
+const GRAVITY = -20;
+const JUMP_SPEED = 8;
 
 // ============================================================
 //  射線檢測
@@ -371,7 +451,6 @@ function getPlacePosition() {
 // ============================================================
 const keys = { w: false, a: false, s: false, d: false, shift: false };
 let isLocked = false;
-let isPointerLocked = false;
 
 document.addEventListener('click', () => {
     if (!isLocked) {
@@ -381,7 +460,6 @@ document.addEventListener('click', () => {
 
 document.addEventListener('pointerlockchange', () => {
     isLocked = document.pointerLockElement === renderer.domElement;
-    isPointerLocked = isLocked;
 });
 
 document.addEventListener('mousemove', (e) => {
@@ -399,26 +477,20 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'd' || e.key === 'D') keys.d = true;
     if (e.key === 'Shift') keys.shift = true;
     
+    if (e.key === ' ' || e.key === 'Space') {
+        e.preventDefault();
+        if (isOnGround) {
+            velocityY = JUMP_SPEED;
+            isOnGround = false;
+        }
+    }
+    
     const num = parseInt(e.key);
     if (num >= 1 && num <= 9) {
         selectedSlot = num - 1;
         updateHotbar();
     }
 });
-// ============================================================
-//  跳躍系統
-// ============================================================
-let velocityY = 0;
-let isOnGround = false;
-const GRAVITY = -20;
-const JUMP_SPEED = 8;
-
-function jump() {
-    if (isOnGround) {
-        velocityY = JUMP_SPEED;
-        isOnGround = false;
-    }
-}
 
 document.addEventListener('keyup', (e) => {
     if (e.key === 'w' || e.key === 'W') keys.w = false;
@@ -428,7 +500,6 @@ document.addEventListener('keyup', (e) => {
     if (e.key === 'Shift') keys.shift = false;
 });
 
-// 滑鼠事件
 renderer.domElement.addEventListener('mousedown', (e) => {
     if (!isLocked) return;
     if (e.button === 0) {
@@ -475,7 +546,6 @@ function updateHotbar() {
         </div>`;
     }).join('');
     
-    // 更新背包資訊
     const infoEl = document.getElementById('inventoryInfo');
     const items = Object.keys(inventory).filter(k => inventory[k] > 0);
     if (items.length > 0) {
@@ -572,11 +642,13 @@ function handleMessage(data) {
 }
 
 // ============================================================
-//  玩家管理
+//  其他玩家
 // ============================================================
 function addOtherPlayer(id, x, y, z) {
     if (otherPlayers[id]) return;
-    const cube = createPlayerCube(0xff6644);
+    const colors = [0xff6644, 0x44ff66, 0x66ddff, 0xffdd44, 0xdd66ff];
+    const color = colors[id % colors.length];
+    const cube = createMinecraftPlayer(color);
     cube.position.set(x, y || 0, z);
     scene.add(cube);
     otherPlayers[id] = { mesh: cube, x, y, z };
@@ -627,7 +699,7 @@ function sendPosition() {
 }
 
 // ============================================================
-//  動畫循環
+//  更新玩家 (含跳躍)
 // ============================================================
 function updatePlayer(delta) {
     if (!isLocked) return;
@@ -673,11 +745,15 @@ function updatePlayer(delta) {
         const p = otherPlayers[id];
         p.mesh.position.x += (p.x - p.mesh.position.x) * 0.1;
         p.mesh.position.z += (p.z - p.mesh.position.z) * 0.1;
+        p.mesh.position.y += (p.y - p.mesh.position.y) * 0.1;
     }
 
     sendPosition();
 }
 
+// ============================================================
+//  動畫循環
+// ============================================================
 function animate() {
     requestAnimationFrame(animate);
     updatePlayer(0.016);
@@ -700,7 +776,7 @@ connectWebSocket();
 animate();
 
 console.log('⛏️ Minecraft 方塊世界已啟動!');
-console.log('📖 WASD移動 | 滑鼠瞄準 | 左鍵挖掘 | 右鍵放置');
+console.log('📖 WASD移動 | 空白跳躍 | 滑鼠瞄準 | 左鍵挖掘 | 右鍵放置');
 </script>
 </body>
 </html>
