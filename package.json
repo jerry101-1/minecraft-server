@@ -1,7 +1,7 @@
 {
     "name": "minecraft-server",
     "version": "1.0.0",
-    "description": "Minecraft 方塊伺服器",
+    "description": "Minecraft 方塊世界伺服器",
     "main": "server.js",
     "scripts": {
         "start": "node server.js"
