@@ -149,7 +149,6 @@
 
 <script type="module">
 import * as THREE from 'three';
-
 // ============================================================
 //  連線設定
 // ============================================================
@@ -161,7 +160,7 @@ let world = {};
 let inventory = {};
 
 // ============================================================
-//  方塊顏色
+//  方塊定義 (Minecraft 完整方塊)
 // ============================================================
 const BLOCK_COLORS = {
     0: '#000000',
@@ -175,6 +174,15 @@ const BLOCK_COLORS = {
     8: '#7a7a7a',
     9: '#aa5a3a',
     10: '#88ccff',
+    11: '#222244',
+    12: '#333333',
+    13: '#222222',
+    14: '#ccaa88',
+    15: '#ffcc44',
+    16: '#44ddff',
+    17: '#ff4444',
+    18: '#ffffff',
+    19: '#88ddff',
 };
 
 const BLOCK_NAMES = {
@@ -189,14 +197,226 @@ const BLOCK_NAMES = {
     8: '鵝卵石',
     9: '紅磚',
     10: '玻璃',
+    11: '黑曜石',
+    12: '基岩',
+    13: '煤礦',
+    14: '鐵礦',
+    15: '金礦',
+    16: '鑽石礦',
+    17: '紅石礦',
+    18: '雪塊',
+    19: '冰塊',
 };
 
+// 熱鍵方塊
+const hotbarBlocks = [1, 2, 4, 5, 7, 8, 9, 10, 11];
+// ============================================================
+//  16x16 像素紋理生成 (Minecraft 風格)
+// ============================================================
+function createPixelTexture(colors, size = 16) {
+    const canvas = document.createElement('canvas');
+    canvas.width = size;
+    canvas.height = size;
+    const ctx = canvas.getContext('2d');
+    
+    for (let y = 0; y < size; y++) {
+        for (let x = 0; x < size; x++) {
+            const idx = x + y * size;
+            const color = colors[idx] || '#888888';
+            ctx.fillStyle = color;
+            ctx.fillRect(x, y, 1, 1);
+        }
+    }
+    
+    const texture = new THREE.CanvasTexture(canvas);
+    texture.magFilter = THREE.NearestFilter;
+    texture.minFilter = THREE.NearestFilter;
+    return texture;
+}
+
+// 草地紋理 (16x16)
+function getGrassTexture() {
+    const colors = [];
+    for (let y = 0; y < 16; y++) {
+        for (let x = 0; x < 16; x++) {
+            if (y < 3) {
+                // 草地頂部 - 綠色
+                const g = 100 + Math.floor(Math.random() * 40);
+                colors.push(`rgb(${40 + Math.floor(Math.random() * 20)}, ${g}, ${30 + Math.floor(Math.random() * 20)})`);
+            } else if (y < 6) {
+                // 草地側面 - 土綠色
+                const r = 70 + Math.floor(Math.random() * 30);
+                const g = 60 + Math.floor(Math.random() * 30);
+                const b = 30 + Math.floor(Math.random() * 20);
+                colors.push(`rgb(${r}, ${g}, ${b})`);
+            } else {
+                // 草地底部 - 泥土
+                const r = 90 + Math.floor(Math.random() * 30);
+                const g = 70 + Math.floor(Math.random() * 30);
+                const b = 40 + Math.floor(Math.random() * 20);
+                colors.push(`rgb(${r}, ${g}, ${b})`);
+            }
+        }
+    }
+    return createPixelTexture(colors);
+}
+
+// 泥土紋理
+function getDirtTexture() {
+    const colors = [];
+    for (let i = 0; i < 256; i++) {
+        const r = 90 + Math.floor(Math.random() * 40);
+        const g = 70 + Math.floor(Math.random() * 30);
+        const b = 40 + Math.floor(Math.random() * 20);
+        colors.push(`rgb(${r}, ${g}, ${b})`);
+    }
+    return createPixelTexture(colors);
+}
+
+// 石頭紋理
+function getStoneTexture() {
+    const colors = [];
+    for (let i = 0; i < 256; i++) {
+        const v = 120 + Math.floor(Math.random() * 60);
+        colors.push(`rgb(${v}, ${v}, ${v})`);
+    }
+    return createPixelTexture(colors);
+}
+
+// 木頭紋理
+function getWoodTexture() {
+    const colors = [];
+    for (let y = 0; y < 16; y++) {
+        for (let x = 0; x < 16; x++) {
+            const stripe = (y % 3 === 0 || y % 3 === 1) ? 20 : 0;
+            const r = 100 + stripe + Math.floor(Math.random() * 20);
+            const g = 70 + stripe + Math.floor(Math.random() * 20);
+            const b = 40 + stripe + Math.floor(Math.random() * 10);
+            colors.push(`rgb(${r}, ${g}, ${b})`);
+        }
+    }
+    return createPixelTexture(colors);
+}
+
+// 木材紋理
+function getPlankTexture() {
+    const colors = [];
+    for (let y = 0; y < 16; y++) {
+        for (let x = 0; x < 16; x++) {
+            const stripe = (x % 4 === 0 || x % 4 === 1) ? 0 : 30;
+            const r = 180 + stripe + Math.floor(Math.random() * 20);
+            const g = 150 + stripe + Math.floor(Math.random() * 20);
+            const b = 100 + stripe + Math.floor(Math.random() * 10);
+            colors.push(`rgb(${r}, ${g}, ${b})`);
+        }
+    }
+    return createPixelTexture(colors);
+}
+
+// 樹葉紋理
+function getLeavesTexture() {
+    const colors = [];
+    for (let i = 0; i < 256; i++) {
+        const g = 80 + Math.floor(Math.random() * 50);
+        const r = 30 + Math.floor(Math.random() * 20);
+        const b = 20 + Math.floor(Math.random() * 20);
+        const alpha = Math.random() > 0.3 ? 1 : 0.2;
+        colors.push(`rgba(${r}, ${g}, ${b}, ${alpha})`);
+    }
+    return createPixelTexture(colors);
+}
+
+// 沙子紋理
+function getSandTexture() {
+    const colors = [];
+    for (let i = 0; i < 256; i++) {
+        const r = 200 + Math.floor(Math.random() * 30);
+        const g = 180 + Math.floor(Math.random() * 30);
+        const b = 130 + Math.floor(Math.random() * 20);
+        colors.push(`rgb(${r}, ${g}, ${b})`);
+    }
+    return createPixelTexture(colors);
+}
+
+// 鵝卵石紋理
+function getCobbleTexture() {
+    const colors = [];
+    for (let y = 0; y < 16; y++) {
+        for (let x = 0; x < 16; x++) {
+            const v = 100 + Math.floor(Math.random() * 50);
+            const noise = (x % 4 === 0 || y % 4 === 0) ? 40 : 0;
+            colors.push(`rgb(${v - noise}, ${v - noise}, ${v - noise})`);
+        }
+    }
+    return createPixelTexture(colors);
+}
+
+// 紅磚紋理
+function getBrickTexture() {
+    const colors = [];
+    for (let y = 0; y < 16; y++) {
+        for (let x = 0; x < 16; x++) {
+            const brick = (Math.floor(x / 4) + Math.floor(y / 4)) % 2 === 0;
+            const r = brick ? 160 : 130;
+            const g = brick ? 80 : 60;
+            const b = brick ? 50 : 40;
+            const noise = Math.floor(Math.random() * 20);
+            colors.push(`rgb(${r + noise}, ${g + noise}, ${b + noise})`);
+        }
+    }
+    return createPixelTexture(colors);
+}
+
+// 礦物紋理
+function getOreTexture(baseColor, highlightColor) {
+    const colors = [];
+    for (let i = 0; i < 256; i++) {
+        const isOre = Math.random() > 0.7;
+        if (isOre) {
+            colors.push(highlightColor);
+        } else {
+            const v = 100 + Math.floor(Math.random() * 50);
+            colors.push(`rgb(${v}, ${v}, ${v})`);
+        }
+    }
+    return createPixelTexture(colors);
+}
+
+// 方塊紋理快取
+const textureCache = {};
+
+function getBlockTexture(blockId) {
+    if (textureCache[blockId]) return textureCache[blockId];
+    
+    let texture;
+    switch(blockId) {
+        case 1: texture = getGrassTexture(); break;
+        case 2: texture = getDirtTexture(); break;
+        case 3: texture = getStoneTexture(); break;
+        case 4: texture = getWoodTexture(); break;
+        case 5: texture = getPlankTexture(); break;
+        case 6: texture = getLeavesTexture(); break;
+        case 7: texture = getSandTexture(); break;
+        case 8: texture = getCobbleTexture(); break;
+        case 9: texture = getBrickTexture(); break;
+        case 13: texture = getOreTexture('#888888', '#444444'); break;
+        case 14: texture = getOreTexture('#888888', '#ccaa88'); break;
+        case 15: texture = getOreTexture('#888888', '#ffcc44'); break;
+        case 16: texture = getOreTexture('#888888', '#44ddff'); break;
+        default:
+            const color = BLOCK_COLORS[blockId] || '#888888';
+            texture = createPixelTexture(new Array(256).fill(color));
+    }
+    
+    textureCache[blockId] = texture;
+    return texture;
+}
 // ============================================================
 //  Three.js 場景
 // ============================================================
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x87CEEB);
-scene.fog = new THREE.Fog(0x87CEEB, 40, 60);
+scene.fog = new THREE.Fog(0x87CEEB, 50, 70);
 
 const camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.1, 80);
 camera.position.set(0, 5, 10);
@@ -211,7 +431,7 @@ document.body.appendChild(renderer.domElement);
 // ============================================================
 //  燈光
 // ============================================================
-const ambient = new THREE.AmbientLight(0x6688bb, 0.4);
+const ambient = new THREE.AmbientLight(0x6688bb, 0.5);
 scene.add(ambient);
 
 const sun = new THREE.DirectionalLight(0xffeedd, 1.2);
@@ -246,9 +466,9 @@ function createBlockMesh(x, y, z, blockId) {
     }
     if (blockId === 0) return;
     
-    const color = BLOCK_COLORS[blockId] || '#888888';
+    const texture = getBlockTexture(blockId);
     const mat = new THREE.MeshStandardMaterial({
-        color: color,
+        map: texture,
         roughness: 0.7,
         metalness: 0.05,
     });
@@ -271,7 +491,7 @@ function updateWorld(newWorld) {
     
     let count = 0;
     for (const key in newWorld) {
-        if (count > 5000) break;
+        if (count > 8000) break;
         const [x, y, z] = key.split(',').map(Number);
         const blockId = newWorld[key];
         if (blockId !== 0) {
@@ -284,7 +504,6 @@ function updateWorld(newWorld) {
 function updateBlock(x, y, z, blockId) {
     createBlockMesh(Math.round(x), Math.round(y), Math.round(z), blockId);
 }
-
 // ============================================================
 //  Minecraft 風格角色
 // ============================================================
@@ -311,13 +530,11 @@ function createMinecraftPlayer(color = 0x44ddff) {
     head.castShadow = true;
     group.add(head);
     
-    // 頭髮 (上層)
+    // 頭髮
     const hairMat = new THREE.MeshStandardMaterial({ color: 0x6a4a2a });
     const hair = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.12, 0.5), hairMat);
     hair.position.y = 1.1;
     group.add(hair);
-    
-    // 頭髮 (兩側)
     const hairSide1 = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.3, 0.5), hairMat);
     hairSide1.position.set(-0.28, 0.9, 0);
     group.add(hairSide1);
@@ -325,13 +542,11 @@ function createMinecraftPlayer(color = 0x44ddff) {
     hairSide2.position.set(0.28, 0.9, 0);
     group.add(hairSide2);
     
-    // 眼睛 (左)
+    // 眼睛
     const eyeMat = new THREE.MeshStandardMaterial({ color: 0x222244 });
     const eyeL = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.04), eyeMat);
     eyeL.position.set(-0.14, 0.96, 0.27);
     group.add(eyeL);
-    
-    // 眼睛 (右)
     const eyeR = new THREE.Mesh(new THREE.BoxGeometry(0.06, 0.06, 0.04), eyeMat);
     eyeR.position.set(0.14, 0.96, 0.27);
     group.add(eyeR);
@@ -342,33 +557,23 @@ function createMinecraftPlayer(color = 0x44ddff) {
     mouth.position.set(0, 0.85, 0.27);
     group.add(mouth);
     
-    // 左手臂 (膚色)
-    const armMat = new THREE.MeshStandardMaterial({ 
-        color: 0xffccaa, 
-        roughness: 0.7 
-    });
+    // 手臂
+    const armMat = new THREE.MeshStandardMaterial({ color: 0xffccaa, roughness: 0.7 });
     const armL = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.1), armMat);
     armL.position.set(-0.36, 0.4, 0);
     armL.castShadow = true;
     group.add(armL);
-    
-    // 右手臂 (膚色)
     const armR = new THREE.Mesh(new THREE.BoxGeometry(0.1, 0.6, 0.1), armMat);
     armR.position.set(0.36, 0.4, 0);
     armR.castShadow = true;
     group.add(armR);
     
-    // 左腿 (褲子)
-    const legMat = new THREE.MeshStandardMaterial({ 
-        color: 0x224488, 
-        roughness: 0.8 
-    });
+    // 腿
+    const legMat = new THREE.MeshStandardMaterial({ color: 0x224488, roughness: 0.8 });
     const legL = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.3, 0.18), legMat);
     legL.position.set(-0.15, 0.15, 0);
     legL.castShadow = true;
     group.add(legL);
-    
-    // 右腿 (褲子)
     const legR = new THREE.Mesh(new THREE.BoxGeometry(0.18, 0.3, 0.18), legMat);
     legR.position.set(0.15, 0.15, 0);
     legR.castShadow = true;
@@ -398,15 +603,13 @@ const otherPlayers = {};
 // ============================================================
 let velocityY = 0;
 let isOnGround = false;
-const GRAVITY = -20;
-const JUMP_SPEED = 8;
-
+const GRAVITY = -22;
+const JUMP_SPEED = 8.5;
 // ============================================================
 //  射線檢測
 // ============================================================
 const raycaster = new THREE.Raycaster();
 let selectedSlot = 0;
-const hotbarBlocks = [1, 2, 4, 5, 7, 8, 9, 10, 0];
 
 function getTargetBlock() {
     raycaster.setFromCamera({ x: 0, y: 0 }, camera);
@@ -530,7 +733,6 @@ renderer.domElement.addEventListener('mousedown', (e) => {
 });
 
 renderer.domElement.addEventListener('contextmenu', (e) => e.preventDefault());
-
 // ============================================================
 //  UI
 // ============================================================
@@ -597,6 +799,13 @@ function handleMessage(data) {
     if (data.type === 'init') {
         playerId = data.id;
         world = data.world || {};
+        
+        // 設定出生點
+        if (data.spawn) {
+            localPlayer.position.set(data.spawn.x, data.spawn.y, data.spawn.z);
+            camera.position.set(data.spawn.x, data.spawn.y + 1.8, data.spawn.z);
+        }
+        
         updateWorld(world);
         if (data.players) {
             for (const p of data.players) {
@@ -640,7 +849,6 @@ function handleMessage(data) {
         updateHotbar();
     }
 }
-
 // ============================================================
 //  其他玩家
 // ============================================================
@@ -699,7 +907,7 @@ function sendPosition() {
 }
 
 // ============================================================
-//  更新玩家 (含跳躍)
+//  更新玩家 (含跳躍 + 重力)
 // ============================================================
 function updatePlayer(delta) {
     if (!isLocked) return;
@@ -733,8 +941,8 @@ function updatePlayer(delta) {
         move.normalize().multiplyScalar(speed * delta);
         localPlayer.position.x += move.x;
         localPlayer.position.z += move.z;
-        localPlayer.position.x = Math.max(-25, Math.min(25, localPlayer.position.x));
-        localPlayer.position.z = Math.max(-25, Math.min(25, localPlayer.position.z));
+        localPlayer.position.x = Math.max(-28, Math.min(28, localPlayer.position.x));
+        localPlayer.position.z = Math.max(-28, Math.min(28, localPlayer.position.z));
     }
 
     camera.position.x = localPlayer.position.x;
